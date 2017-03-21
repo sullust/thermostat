@@ -1732,7 +1732,7 @@ def initialize() {
 
 def rescheduleIfNeeded(evt) {
 	if (evt) traceEvent(settings.logFilter,"rescheduleIfNeeded>$evt.name=$evt.value",settings.detailedNotif)
-	Integer delay = 5 // By default, schedule SetZoneSettings() every 5 min.
+	Integer delay = 1 // By default, schedule SetZoneSettings() every 5 min.
 	BigDecimal currentTime = now()    
 	BigDecimal lastPollTime = (currentTime - (state?.poll["last"]?:0))  
 	if (lastPollTime != currentTime) {    
@@ -1775,7 +1775,7 @@ def setZoneSettings() {
     
 	traceEvent(settings.logFilter,"setZoneSettings>setVentSettingsFlag=$setVentSettingsFlag,setAdjustmentTempFlag=$setAdjustmentTempFlag" +
 		",setAdjustmentOutdoorTempFlag=$setAdjustmentOutdoorTempFlag,setAdjustmentFanFlag=$setAdjustmentFanFlag",settings.detailedNotif)
-	Integer delay = 5 // By default, schedule SetZoneSettings() every 5 min.
+	Integer delay = 1 // By default, schedule SetZoneSettings() every 5 min.
 
 	//schedule the rescheduleIfNeeded() function
 	state?.poll["last"] = now()
