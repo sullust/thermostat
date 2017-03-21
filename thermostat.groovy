@@ -1715,7 +1715,7 @@ def initialize() {
       
 	state?.poll = [ last: 0, rescheduled: now() ]
 
-	Integer delay =1 				// wake up every 5 minutes to apply zone settings if any
+	Integer delay = 3 				// wake up every 5 minutes to apply zone settings if any
 	traceEvent(settings.logFilter,"initialize>scheduling setZoneSettings every ${delay} minutes to check for zone settings to be applied",settings.detailedNotif,
 		get_LOG_INFO())
 
@@ -1732,7 +1732,7 @@ def initialize() {
 
 def rescheduleIfNeeded(evt) {
 	if (evt) traceEvent(settings.logFilter,"rescheduleIfNeeded>$evt.name=$evt.value",settings.detailedNotif)
-	Integer delay = 1 // By default, schedule SetZoneSettings() every 5 min.
+	Integer delay = 3 // By default, schedule SetZoneSettings() every 5 min.
 	BigDecimal currentTime = now()    
 	BigDecimal lastPollTime = (currentTime - (state?.poll["last"]?:0))  
 	if (lastPollTime != currentTime) {    
@@ -1775,7 +1775,7 @@ def setZoneSettings() {
     
 	traceEvent(settings.logFilter,"setZoneSettings>setVentSettingsFlag=$setVentSettingsFlag,setAdjustmentTempFlag=$setAdjustmentTempFlag" +
 		",setAdjustmentOutdoorTempFlag=$setAdjustmentOutdoorTempFlag,setAdjustmentFanFlag=$setAdjustmentFanFlag",settings.detailedNotif)
-	Integer delay = 1 // By default, schedule SetZoneSettings() every 5 min.
+	Integer delay = 3 // By default, schedule SetZoneSettings() every 5 min.
 
 	//schedule the rescheduleIfNeeded() function
 	state?.poll["last"] = now()
@@ -2563,6 +2563,10 @@ def adjust_thermostat_setpoints(data) {
 	def scheduleName = settings[key]
 	boolean isResidentPresent
 
+ 	traceEvent(settings.logFilter, "Settings dump" + settings.toString() ,settings.detailedNotif, get_LOG_INFO())
+
+ 	key = "begintime$indiceSchedule"
+ 	def startTime = settings[key]
 	def startTimeToday = timeToday(startTime,location.timeZone)
     
 	if (scheduleName != state?.lastScheduleName) {
