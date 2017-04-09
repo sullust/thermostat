@@ -2563,7 +2563,7 @@ def adjust_thermostat_setpoints(data) {
 	def scheduleName = settings[key]
 	boolean isResidentPresent
 
- 	traceEvent(settings.logFilter, "Settings dump" + settings.toString() ,settings.detailedNotif, get_LOG_INFO())
+ 	// traceEvent(settings.logFilter, "Settings dump" + settings.toString() ,settings.detailedNotif, get_LOG_INFO())
 
  	key = "begintime$indiceSchedule"
  	def startTime = settings[key]
