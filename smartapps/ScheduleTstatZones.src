@@ -20,13 +20,13 @@ definition(
 	name: "${get_APP_NAME()}",
 	namespace: "yracine",
 	author: "Yves Racine",
-	description: "Enable Heating/Cooling Zoned Solutions for thermostats coupled with smart vents (optional) for better temp settings control throughout your home",
+	description: "Enable Zoned Heating/Cooling for thermostats coupled with smart vents (optional) for better temp settings control throughout your home",
 	category: "My Apps",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience.png",
 	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience%402x.png"
 )
 
-def get_APP_VERSION() {return "7.3"}
+def get_APP_VERSION() {return "7.3.9c"}
 
 preferences {
 
@@ -118,12 +118,12 @@ def dashboardPage() {
 			}
 		} /* end section dashboard */
 		section("ABOUT") {
-			paragraph "${get_APP_NAME()}, the smartapp that enables Heating/Cooling zoned settings at selected thermostat(s) coupled with smart vents (optional) for better temp settings control throughout your home"
-			paragraph "${get_APP_VERSION()}" 
+			paragraph "${get_APP_NAME()}, the smartapp that enables Zoned Heating/Cooling at selected thermostat(s) coupled with smart vents (optional) for better temp settings control throughout your home"
+			paragraph "Version ${get_APP_VERSION()}" 
 			paragraph "If you like this smartapp, please support the developer via PayPal and click on the Paypal link below " 
 				href url: "https://www.paypal.me/ecomatiqhomes",
 					title:"Paypal donation..."
-			paragraph "Copyright�2015 Yves Racine"
+			paragraph "Copyright@2015 Yves Racine"
 				href url:"http://www.maisonsecomatiq.com/#!home/mainPage", style:"embedded", required:false, title:"More information..."  
  				description: "http://www.maisonsecomatiq.com/#!home/mainPage"
 		} /* end section about */
@@ -271,8 +271,8 @@ def roomsSetup(params) {
 
 		}
 		section("Room ${indiceRoom}-ContactSensor [optional]") {
-			input image: "${getCustomImagePath()}contactSensor.png", "contactSensor${indiceRoom}", title: "Contact sensor for better vent/temp adjustment", "capability.contactSensor", 
-				required: false, description: "Optional,if open=>vent is closed"
+			input image: "${getCustomImagePath()}contactSensor.png", "contactSensor${indiceRoom}", title: "Contact sensor(s) for better vent/temp adjustment", "capability.contactSensor", 
+				required: false, multiple:true, description: "Optional,if open=>vent is closed"
 
 		}
         
@@ -396,8 +396,8 @@ def configDisplayPage() {
             
             
 			paragraph " >SetVentSettings: ${setVentSettingsString}" +
-					"\n >SetAwayOrPresent: ${setAwayOrPresentString}" +
-					"\n >AwayOrPresentNow: ${state?.setPresentOrAway}" + 
+					"\n >SetAwayOrPresentFlag: ${setAwayOrPresentString}" +
+					"\n >SetAwayOrPresentNow: ${state?.setPresentOrAway}" + 
 					"\n >AdjustTstatVs.indoorAvgTemp: ${setAdjustmentTempString}" +
 					"\n >AdjustTstatTempCalcMethod: ${setAdjustmentTempMethod}" +
 					"\n >AdjustTempBasedOnContact: ${setTempAdjustmentContactString}" +
@@ -433,7 +433,6 @@ def configDisplayPage() {
 			key = "begintime$i"
 			def startTime = settings[key]
 			if (startTime == null) {
-					console.info("startTime is null")
         			continue
 			}
 			def startTimeToday = timeToday(startTime,location.timeZone)
@@ -621,10 +620,14 @@ def configDisplayPage() {
 								total_temp_diff = total_temp_diff + temp_diff    
 							}   
 							if (contactSensor) {      
-								def contactState = contactSensor.currentState("contact")
-								paragraph image: "${getCustomImagePath()}contactSensor.png", " ContactSensor: $contactSensor" + 
-									"\n >ContactState: ${contactState.value}"                                
-							}  
+								if (any_contact_open(contactSensor)) {
+									paragraph image: "${getCustomImagePath()}contactSensor.png", " ContactSensor: $contactSensor" + 
+										"\n >ContactState: open" 
+								} else {
+									paragraph image: "${getCustomImagePath()}contactSensor.png", " ContactSensor: $contactSensor" + 
+										"\n >ContactState: all closed" 
+								}
+							}
 							def baselinePressure
 							if (pressureSensor) {
 								baselinePressure= pressureSensor.currentValue("pressure")								                            
@@ -911,15 +914,13 @@ def schedulesSetup(params) {
 	def enumModes=location.modes.collect{ it.name }
 	def indiceSchedule=1
 	// Assign params to indiceSchedule.  Sometimes parameters are double nested.
-	if (params?.indiceSchedule || params?.params?.indiceSchedule) {
-
-		if (params.indiceSchedule) {
-			indiceSchedule = params.indiceSchedule
-		} else {
-			indiceSchedule = params.params.indiceSchedule
-		}
+	if (params?.indiceSchedule) {
+		indiceSchedule = params.indiceSchedule
+		state?.params=params        
+	} else if (state?.params?.indiceSchedule) {    
+		indiceSchedule = state?.params.indiceSchedule
 	}    
-	indiceSchedule=indiceSchedule.intValue()
+  	indiceSchedule=indiceSchedule.intValue()
 
 	dynamicPage(name: "schedulesSetup", title: "Schedule Setup", uninstall: false) {
 		section("Schedule ${indiceSchedule} Setup") {
@@ -1289,7 +1290,7 @@ def check_use_alternative_cooling(data) {
 			} else if ((useAlternativeWhenCooling) && (currentMode == 'off')) {
 				traceEvent(settings.logFilter,"check_use_alternative_cooling>useAlternativeWhenCooling= $useAlternativeWhenCooling,restoring $thermostat to ${state?.lastThermostatMode} mode ",settings.detailedNotif,
 					get_LOG_INFO(),true)            
-				if (state?.lastThermostatMode) { // by default, set it to cool
+				if (!state?.lastThermostatMode) { // by default, set it to cool
 					thermostat.cool()                
 				} else {                
 					restore_thermostat_mode()  // set the thermostat back to the mode it was before using alternative cooling           
@@ -1298,7 +1299,7 @@ def check_use_alternative_cooling(data) {
 			if (adjustmentFanFlag) {             
 				if (currentFanMode != 'auto') {            
 					traceEvent(settings.logFilter,"check_use_alternative_cooling>about to turn on the thermostat's fan, saving the current Fan Mode=${currentFanMode}",settings.detailedNotif)            
-					if (state?.lastThermostatFanMode) { // save the fan mode for later
+					if (!state?.lastThermostatFanMode) { // save the fan mode for later
 						state?.lastThermostatFanMode=  currentFanMode
 					}
 				}
@@ -1333,7 +1334,7 @@ def check_use_alternative_cooling(data) {
 			if ((currentTemp.toFloat() > desiredTemp) && (currentMode=='off')) {        
 				traceEvent(settings.logFilter,"check_use_alternative_cooling>diffToBeUsed=$diffToBeUsed, currentTemp ($currentTemp) > desiredTemp in schedule ($desiredTemp), switching $thermostat to cool mode",settings.detailedNotif,
 					get_LOG_INFO(),true)           
-				if (state?.lastThermostatMode) { // by default, set it to cool
+				if (!state?.lastThermostatMode) { // by default, set it to cool
 					thermostat.cool()                
 				} else {                
 					restore_thermostat_mode()  // set the thermostat back to the mode it was before using alternative cooling           
@@ -1354,7 +1355,7 @@ def check_use_alternative_cooling(data) {
     	        
 					traceEvent(settings.logFilter,"check_use_alternative_cooling>useAlternativeWhenCooling= $useAlternativeWhenCooling,restoring $thermostat to ${state?.lastThermostatMode} mode ",settings.detailedNotif,
 						settings.detailedNotif,get_LOG_INFO(),true )            
-					if (state?.lastThermostatMode) { // by default, set it to cool
+					if (!state?.lastThermostatMode) { // by default, set it to cool
 						thermostat.cool()                
 					} else {                
 						restore_thermostat_mode()  // set the thermostat back to the mode it was before using alternative cooling           
@@ -1367,7 +1368,7 @@ def check_use_alternative_cooling(data) {
 					if (currentFanMode != 'auto') {            
 						traceEvent(settings.logFilter,"check_use_alternative_cooling>about to turn on the thermostat's fan, saving the current Fan Mode=${currentFanMode}",
 							settings.detailedNotif, get_LOG_INFO(),true)                                    
-						if (state?.lastThermostatFanMode) { // save the fan mode for later
+						if (!state?.lastThermostatFanMode) { // save the fan mode for later
 							state?.lastThermostatFanMode=  currentFanMode
 						}
 					}
@@ -1415,7 +1416,7 @@ def check_use_alternative_cooling(data) {
 			if ((currentTemp.toFloat() > desiredTemp) && (currentMode=='off')) {        
 				traceEvent(settings.logFilter,"check_use_alternative_cooling>diffToBeUsed=$diffToBeUsed,currentTemp ($currentTemp) > desiredCoolTemp in schedule ($desiredCoolTemp), switching $thermostat to ${state?.lastThermostatMode} mode",            
 					settings.detailedNotif, get_LOG_INFO(),true)
-				if (state?.lastThermostatMode) { // by default, set it to cool
+				if (!state?.lastThermostatMode) { // by default, set it to cool
 					thermostat.cool()                
 				} else {                
 					restore_thermostat_mode()  // set the thermostat back to the mode it was before using alternative cooling           
@@ -1483,7 +1484,7 @@ def ventTemperatureHandler(evt) {
 		traceEvent(settings.logFilter,"current HVAC mode is ${currentHVACMode}, found one of the vents' value too hot (${evt.value}), opening all vents to avoid any damage", 
 			true,get_LOG_ERROR(),true)        
         
-	} /* if too hot */           
+	} /* end if too hot */           
 	if ((currentHVACMode in ['cool','auto']) && (ventTemp <= MIN_TEMP_VENT_SWITCH)) {
 		if (fullyCloseVentsFlag) {
 			// Safeguards are not implemented as requested     
@@ -1495,7 +1496,7 @@ def ventTemperatureHandler(evt) {
 		open_all_vents()
 		traceEvent(settings.logFilter,"current HVAC mode is ${currentHVACMode}, found one of the vents' value too cold (${evt.value}), opening all vents to avoid any damage",
 			true,get_LOG_ERROR(),true)        
-	} /* if too cold */ 
+	} /* end if too cold */ 
 }
 
 def thermostatOperatingHandler(evt) {
@@ -1632,7 +1633,7 @@ private void restore_thermostat_mode() {
 			thermostat.off()
 		}            
 		traceEvent(settings.logFilter, "thermostat ${thermostat}'s mode is now set back to ${state?.lastThermostatMode}",settings.detailedNotif, get_LOG_INFO(),true)
-		state?.lastThermostatMode=""        
+		state?.lastThermostatMode=null        
 	}        
 	if (state?.lastThermostatFanMode) {
 		if (state?.lastThermostatFanMode == 'on') {
@@ -1645,7 +1646,7 @@ private void restore_thermostat_mode() {
 			thermostat.fanCirculate()
 		}            
 		traceEvent(settings.logFilter, "thermostat ${thermostat}'s fan mode is now set back to ${state?.lastThermostatFanMode}", settings.detailedNotif, get_LOG_INFO(),true)
-		state?.lastThermostatFanMode="" 
+		state?.lastThermostatFanMode=null 
 	}        
 }
 
@@ -1715,7 +1716,7 @@ def initialize() {
       
 	state?.poll = [ last: 0, rescheduled: now() ]
 
-	Integer delay = 5 				// wake up every 5 minutes to apply zone settings if any
+	Integer delay =5 				// wake up every 5 minutes to apply zone settings if any
 	traceEvent(settings.logFilter,"initialize>scheduling setZoneSettings every ${delay} minutes to check for zone settings to be applied",settings.detailedNotif,
 		get_LOG_INFO())
 
@@ -1810,7 +1811,7 @@ def setZoneSettings() {
 			traceEvent(settings.logFilter,"setZoneSettings>not able to do a refresh() on ${thermostat}, exception ${e}",settings.detailedNotif, get_LOG_ERROR())
 		}                    
 	}                    
-
+/* Commented out to avoid any "offline" issues on some sensors following some ST platform changes.
 	if ((outTempSensor) && ((outTempSensor.hasCapability("Refresh")) || (outTempSensor.hasCapability("Polling")))) {
 
 		// do a refresh to get latest temp value
@@ -1820,6 +1821,7 @@ def setZoneSettings() {
 			traceEvent(settings.logFilter,"setZoneSettings>not able to do a refresh() on ${outTempSensor}, exception ${e}",settings.detailedNotif, get_LOG_INFO())
 		}                    
 	}
+*/    
 	def ventSwitchesOn = []
 	def mode =thermostat.latestValue("thermostatMode")                 
 	def setVentSettings = (setVentSettingsFlag) ?: false
@@ -1879,7 +1881,6 @@ def setZoneSettings() {
 				set_fan_mode(i)
 			}   
 			runIn(30,"adjust_thermostat_setpoints", [data: [indiceSchedule:i]])
-		        
 			key = "useEvaporativeCoolerFlag${i}"                
 			def useAlternativeCooling = (settings[key]) ?: false
 			if ((useAlternativeCooling) && (mode in ['cool','off', 'auto'])) {
@@ -1900,6 +1901,7 @@ def setZoneSettings() {
 				ventSwitchesZoneSet= adjust_vent_settings_in_zone(i)
 				traceEvent(settings.logFilter,"setZoneSettings>schedule ${scheduleName},list of Vents turned 'on'= ${ventSwitchesZoneSet}",settings.detailedNotif)
 			}
+			state?.lastStartTime = startTimeToday.time		        
  			ventSwitchesOn = ventSwitchesOn + ventSwitchesZoneSet              
 		}
 		else if ((state.lastScheduleName == scheduleName) && (currTime >= startTimeToday.time) && (currTime <= endTimeToday.time) && (IsRightDayForChange(i))) {
@@ -2063,6 +2065,23 @@ private def set_main_tstat_to_AwayOrPresent(mode) {
 
 }
 
+private def any_contact_open(contactSet) {
+
+	if (!contactSet) {
+		return false
+	}        
+	int contactSize=(contactSet)? contactSet.size() :0
+	for (i in 0..contactSize -1) {
+		def contactState = contactSet[i].currentState("contact")
+		if (contactState.value == "open") {
+			traceEvent(settings.logFilter,"any_contact_open>contact ${contactSet[i]} is open",
+					settings.detailedNotif, get_LOG_INFO(), true)                        
+			return true 
+		}
+	}            
+	return false    
+}
+
 private def getSensorTempForAverage(indiceRoom, typeSensor='tempSensor') {
 	def key 
 	def currentTemp=null
@@ -2075,14 +2094,6 @@ private def getSensorTempForAverage(indiceRoom, typeSensor='tempSensor') {
 	def tempSensor = settings[key]
 	if (tempSensor != null) {
 		traceEvent(settings.logFilter,"getTempSensorForAverage>found sensor ${tempSensor}",settings.detailedNotif)
-		if (tempSensor.hasCapability("Refresh") || (tempSensor.hasCapability("Polling"))) {
-			// do a refresh to get the latest temp value
-			try {        
-				tempSensor.refresh()
-			} catch (e) {
-				traceEvent(settings.logFilter,"getSensorTempForAverage>not able to do a refresh() on $tempSensor",settings.detailedNotif, get_LOG_INFO())
-			}                
-		}        
 		currentTemp = tempSensor.currentTemperature?.toFloat().round(1)
 	}
 	return currentTemp
@@ -2247,8 +2258,9 @@ private def setAllRoomTstatsSettings(indiceSchedule,indiceZone) {
 	return foundRoomTstat
 }
 
-private def getAllTempsForAverage(indiceZone) {
+private def getAllTempsForAverage(indiceZone,refreshSensors=false) {
 	def tempAtSensor
+
 	def adjustmentBasedOnContact=(settings.setTempAdjustmentContactFlag)?:false
 
 	def indoorTemps = []
@@ -2260,26 +2272,42 @@ private def getAllTempsForAverage(indiceZone) {
 		def indiceRoom = roomDetails[0]
 		def roomName = roomDetails[1]
 
+		if (adjustmentBasedOnContact) { 
+			key = "contactSensor$indiceRoom"
+			def contactSensor = settings[key]
+			if (contactSensor && any_contact_open(contactSensor)) {
+					continue  // do not use the temp inside the room as the associated contact is open
+			}
+		}            
 		key = "needOccupiedFlag$indiceRoom"
 		def needOccupied = (settings[key]) ?: false
 		traceEvent(settings.logFilter,"getAllTempsForAverage>looping thru all rooms,now room=${roomName},indiceRoom=${indiceRoom}, needOccupied=${needOccupied}",
 			settings.detailedNotif)        
-		if (adjustmentBasedOnContact) { 
-			key = "contactSensor$indiceRoom"
-			def contactSensor = settings[key]
-			if (contactSensor != null) {
-				def contactState = contactSensor.currentState("contact")
-				if (contactState.value == "open") {
-					continue  // do not use the temp inside the room as the associated contact is open
-				}
-			}
-		}            
+
+		key = "tempSensor$indiceRoom"
+		def tempSensor = settings[key]
+
+		if ((refreshSensors) && ((tempSensor) && (tempSensor.hasCapability("Refresh")))) {
+			// do a refresh to get the latest temp value
+			try {        
+				tempSensor.refresh()
+			} catch (e) {
+				traceEvent(settings.logFilter,"getAllTempsForAverage>not able to do a refresh() on $tempSensor",settings.detailedNotif, get_LOG_INFO())
+			}                
+		}        
 		if (needOccupied) {
 
 			key = "motionSensor$indiceRoom"
 			def motionSensor = settings[key]
 			if (motionSensor != null) {
-
+				if ((refreshSensors) && ((motionSensor != tempSensor) && (motionSensor.hasCapability("Refresh")))) {
+					// do a refresh to get the motion value if motionSensor != tempSensor
+					try {        
+						motionSensor.refresh()
+					} catch (e) {
+						traceEvent(settings.logFilter,"getAllTempsForAverage>not able to do a refresh() on $motionSensor",settings.detailedNotif, get_LOG_INFO())
+					}                
+				}
 				if (isRoomOccupied(motionSensor, indiceRoom)) {
 
 					tempAtSensor = getSensorTempForAverage(indiceRoom)
@@ -2312,6 +2340,8 @@ private def getAllTempsForAverage(indiceZone) {
 
 		}
 	} /* end for */
+    
+    
 	return indoorTemps
 
 }
@@ -2562,12 +2592,6 @@ def adjust_thermostat_setpoints(data) {
 	def key = "scheduleName$indiceSchedule"
 	def scheduleName = settings[key]
 	boolean isResidentPresent
-
- 	// traceEvent(settings.logFilter, "Settings dump" + settings.toString() ,settings.detailedNotif, get_LOG_INFO())
-
- 	key = "begintime$indiceSchedule"
- 	def startTime = settings[key]
-	def startTimeToday = timeToday(startTime,location.timeZone)
     
 	if (scheduleName != state?.lastScheduleName) {
 		adjust_thermostat_setpoint_in_zone(indiceSchedule)    
@@ -2586,7 +2610,7 @@ def adjust_thermostat_setpoints(data) {
 
 	}                    
 	state.lastScheduleName = scheduleName
-	state?.lastStartTime = startTimeToday.time
+
 }
 
 
@@ -2649,7 +2673,7 @@ private def adjust_thermostat_setpoint_in_zone(indiceSchedule) {
 				avg_indoor_temp = (indoor_all_zones_temps.max()).round(1)
 			} else  {         
 				float median = (thermostat?.currentCoolingSetpoint + thermostat?.currentHeatingSetpoint).toFloat()
-				median= (median)? (median/2).round(1): (scale=='C')?72:21
+				median= (median)? (median/2).round(1): (scale=='C')?21:72
 				if (currentTemp > median) {
 					avg_indoor_temp = (indoor_all_zones_temps.max()).round(1)
 				} else {
@@ -2789,7 +2813,8 @@ private def adjust_thermostat_setpoint_in_zone(indiceSchedule) {
 
 private def adjust_vent_settings_in_zone(indiceSchedule) {
 	def MIN_OPEN_LEVEL_IN_ZONE=(minVentLevelInZone!=null)?((minVentLevelInZone>=0 && minVentLevelInZone <100)?minVentLevelInZone:10):10
-	float desiredTemp, avg_indoor_temp, avg_temp_diff, total_temp_diff=0, total_temp_in_vents=0,median
+	float avg_indoor_temp, avg_temp_diff, total_temp_diff=0, total_temp_in_vents=0,median
+	def desiredTemp    
 	def indiceRoom
 	boolean closedAllVentsInZone=true
 	int nbVents=0,nbRooms=0,total_level_vents=0
@@ -2836,7 +2861,7 @@ private def adjust_vent_settings_in_zone(indiceSchedule) {
 		desiredTemp = thermostat.currentCoolingSetpoint.toFloat().round(1) 
 	} else if (mode=='auto') {    
 		median = (thermostat?.currentCoolingSetpoint + thermostat?.currentHeatingSetpoint).toFloat()
-		median= (median)? (median/2).round(1): (scale=='C')?72:21
+		median= (median)? (median/2).round(1): (scale=='C')?21:72
 		if (currentTempAtTstat > median) {
 			desiredTemp =thermostat.currentCoolingSetpoint.toFloat().round(1)            
 		} else {
@@ -2849,7 +2874,7 @@ private def adjust_vent_settings_in_zone(indiceSchedule) {
 		}                        
 	} else {
 		desiredTemp = thermostat?.currentHeatingSetpoint
-		desiredTemp = (desiredTemp)? desiredTemp.toFloat().round(1): (scale=='C')?72:21
+		desiredTemp = (desiredTemp)? desiredTemp.toFloat().round(1): (scale=='C')?21:72
 	}    
 	traceEvent(settings.logFilter,"adjust_vent_settings_in_zone>schedule ${scheduleName}, desiredTemp=${desiredTemp}",settings.detailedNotif)
 	indoor_all_zones_temps.add(currentTempAtTstat)
@@ -2868,7 +2893,11 @@ private def adjust_vent_settings_in_zone(indiceSchedule) {
 		traceEvent(settings.logFilter,"adjust_vent_settings_in_zone>zone=${zone}: zoneDetails= ${zoneDetails}",settings.detailedNotif)
 		def indiceZone = zoneDetails[0]
 		def zoneName = zoneDetails[1]
-		def indoorTemps = getAllTempsForAverage(indiceZone)
+/* Commented out to avoid any "offline" issues on some sensors following some ST platform changes.		
+		boolean refreshSensorsFlag= (adjustmentTempFlag)? false :true   // refresh Sensors only when required      
+ 		def indoorTemps = getAllTempsForAverage(indiceZone,refreshSensorsFlag) 
+*/
+ 		def indoorTemps = getAllTempsForAverage(indiceZone)
 
 		if (indoorTemps != [] ) {
 			indoor_all_zones_temps = indoor_all_zones_temps + indoorTemps
@@ -2946,10 +2975,9 @@ private def adjust_vent_settings_in_zone(indiceSchedule) {
 				def contactSensor = settings[key]
 				traceEvent(settings.logFilter,"adjust_vent_settings_in_zone>contactSensor=${contactSensor}",settings.detailedNotif)
 				if (contactSensor != null) {
-					def contactState = contactSensor.currentState("contact")
-					if (contactState.value == "open") {
+					if (any_contact_open(contactSensor)) {
 						switchLevel=((fullyCloseVents)? 0: MIN_OPEN_LEVEL_IN_ZONE)					                
-						traceEvent(settings.logFilter,"adjust_vent_settings_in_zone>schedule ${scheduleName}, in zone ${zoneName}, contact ${contactSensor} is open, the vent(s) in ${roomName} set to mininum level=${switchLevel}",
+						traceEvent(settings.logFilter,"adjust_vent_settings_in_zone>schedule ${scheduleName}, in zone ${zoneName}, a contact ${contactSensor} is open, the vent(s) in ${roomName} set to mininum level=${switchLevel}",
 							settings.detailedNotif, get_LOG_INFO(), true)                        
 					}                
 				}            
@@ -3114,9 +3142,9 @@ private def open_all_vents() {
 		for (int j = 1;(j <= get_MAX_VENTS()); j++)  {
 			def key = "ventSwitch${j}$indiceRoom"
 			def vent = settings[key]
-				if (vent != null) {
-					setVentSwitchLevel(null, vent, 100)
-				} /* end if vent != null */
+			if (vent != null) {
+				setVentSwitchLevel(null, vent, 100)
+			} /* end if vent != null */
 		} /* end for vent switches */
 	} /* end for rooms */
 }
